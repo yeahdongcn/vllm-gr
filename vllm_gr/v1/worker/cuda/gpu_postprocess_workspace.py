@@ -234,19 +234,26 @@ def initialize_beam_postprocess_workspaces(
     *,
     max_batch: int | None = None,
 ):
-    """Prewarm the configured CUDA Beam postprocess bucket on ``runner``.
+    """Prewarm the configured GPU Beam postprocess bucket on ``runner``.
 
     V1 reserves the largest supported logical batch so every admitted size
     reuses the same fixed-address state and selection storage.
     """
 
     device = torch.device(getattr(runner, "device", "cpu"))
-    if device.type != "cuda":
+    if device.type == "cpu":
         return None
+    provider_has_selector = False
+    if device.type != "cuda":
+        from vllm_gr.platforms.interface import FullVocabularyProvider
+        from vllm_gr.platforms.registry import get_active_backend
+
+        provider_has_selector = isinstance(get_active_backend(), FullVocabularyProvider)
+        if not provider_has_selector:
+            return None
 
     from vllm_gr.config import resolve_candidate_width
     from vllm_gr.config.models import ConstraintMode, configured_constraint_mode
-    from vllm_gr.ops.cuda.unconstrained_topk_mcap import flash_logits_rows
     from vllm_gr.v1.worker.gr_context import (
         _get_gr_config,
     )
@@ -279,10 +286,13 @@ def initialize_beam_postprocess_workspaces(
     flash_rows = flash_vocab_size = 0
     deployment = gr_cfg.deployment
     if (
-        deployment.topk_select == "flash"
+        not provider_has_selector
+        and deployment.topk_select == "flash"
         and configured_constraint_mode(gr_cfg) is ConstraintMode.NONE
         and not (isinstance(deployment.head_slice, int) and deployment.head_slice > 0)
     ):
+        from vllm_gr.ops.cuda.unconstrained_topk_mcap import flash_logits_rows
+
         flash_rows = flash_logits_rows(int(width), resolved_max_batch)
         flash_vocab_size = int(runner.model_config.get_vocab_size()) if flash_rows else 0
 

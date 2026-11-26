@@ -706,7 +706,7 @@ class BeamAttentionBackend(AttentionBackend):
     supported_dtypes: ClassVar[list[torch.dtype]] = [torch.float16, torch.bfloat16]
 
     @staticmethod
-    def get_supported_kernel_block_sizes() -> list[int | MultipleOf]:
+    def get_supported_kernel_block_sizes(spec=None) -> list[int | MultipleOf]:
         return [MultipleOf(16)]
 
     @classmethod

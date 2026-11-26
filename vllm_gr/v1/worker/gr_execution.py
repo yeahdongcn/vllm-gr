@@ -100,13 +100,13 @@ def execute_gr_stage(
     local = worker_input(scheduled)
     device_type = str(worker.device).split(":")[0]
     stage_runner: GPUBeamStageRunner | NPUEagerBeamStageRunner
-    if device_type == "cuda":
+    if device_type in ("cuda", "musa"):
         from vllm_gr.v1.worker.cuda.gpu_beam_stage_runner import (
             get_stage_runner,
         )
 
         if hooks_type is None:
-            raise ValueError("CUDA GR execution requires explicit stage hooks")
+            raise ValueError("GPU GR execution requires explicit stage hooks")
         stage_runner = get_stage_runner(
             worker,
             local,
@@ -130,7 +130,7 @@ def execute_gr_stage(
 def execute_gr_retirement(worker: Any, scheduled: Any) -> Any:
     local = worker_input(scheduled)
     device_type = str(worker.device).split(":")[0]
-    if device_type == "cuda":
+    if device_type in ("cuda", "musa"):
         from vllm_gr.v1.worker.cuda.gpu_beam_stage_runner import (
             execute_gr_retirement as retire,
         )

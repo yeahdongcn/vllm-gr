@@ -120,7 +120,11 @@ def _admit_gr_session(self, batch_request) -> None:
         # something the caller can fix by resending.
         validate_gr_execution_config(self.vllm_config)
         validate_gr_device_config(self.vllm_config, batch_request)
-        if self.batch_queue is None or self.batch_queue_size < 2:
+        from vllm_gr.config.backend_plan import read_backend_plan
+
+        plan = read_backend_plan(self.vllm_config)
+        serial_musa = plan is not None and plan.backend_id == "musa"
+        if not serial_musa and (self.batch_queue is None or self.batch_queue_size < 2):
             raise RuntimeError("beam_search requires a non-blocking EngineCore batch queue")
         preprocessed_batch = []
         for engine_request in engine_requests:

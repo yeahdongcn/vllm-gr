@@ -26,6 +26,7 @@ BACKEND_OPTIONS_KEY = "vllm_gr_backend_options"
 _NATIVE_FIELDS = {
     "model_config": (
         "dtype",
+        "enforce_eager",
         "quantization",
         "max_model_len",
         "is_encoder_decoder",

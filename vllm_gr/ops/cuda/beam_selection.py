@@ -62,6 +62,7 @@ def _local_beam_topk_kernel(
     BLOCK: tl.constexpr,
     MASK_INVALID_INDICES: tl.constexpr = False,
     SELECT_BLOCK: tl.constexpr = 0,
+    TOPK: tl.constexpr = None,
 ):
     request = tl.program_id(0)
     tile = tl.program_id(1)
@@ -102,7 +103,7 @@ def _local_beam_topk_kernel(
             # cannot handle.  The smallest packed key preserves the same order.
             ranked = tl.min(packed, axis=0, keep_dims=True)
         else:
-            ranked = ~tl.topk(~packed, SELECT_BLOCK)
+            ranked = ~TOPK(~packed, SELECT_BLOCK)
         output_mask = retained < select_width
         output = request * scratch_stride + tile * select_width + retained
         tl.store(local_scores + output, unpack_score(ranked), mask=output_mask)
@@ -247,6 +248,7 @@ def _bootstrap_beam_outputs_kernel(
     WRITE_FLAT_INDICES: tl.constexpr,
     BLOCK: tl.constexpr,
     REUSE_ORDERED_CANDIDATES: tl.constexpr = False,
+    GATHER: tl.constexpr = None,
 ):
     """Expand the first live parent of every request from one beam to W."""
 
@@ -276,7 +278,7 @@ def _bootstrap_beam_outputs_kernel(
     if REUSE_ORDERED_CANDIDATES:
         # Compare the same packed keys as the fallback sort. Unordered
         # candidates or valid lanes following a stop/masked lane still sort.
-        previous = tl.gather(packed, tl.maximum(rank - 1, 0), axis=0)
+        previous = GATHER(packed, tl.maximum(rank - 1, 0), axis=0)
         if tl.sum(((rank > 0) & (packed < previous)).to(tl.int32), axis=0) != 0:
             selected = tl.sort(packed, descending=False)
         else:
@@ -656,7 +658,8 @@ def _hierarchical_topk_out(
         # When a list is wider than the selection, keep only the winners
         # (bitonic Top-K) instead of sorting every lane.  0 keeps the plain
         # sort for the square W == K case.
-        SELECT_BLOCK=select_block if select_block < local_block else 0,
+        SELECT_BLOCK=select_block if select_block < local_block and hasattr(tl, "topk") else 0,
+        TOPK=getattr(tl, "topk", None),
         # A wider selection (a beam width above 256) makes one local list span
         # more than 256 lanes; add a tier so the per-thread register load of
         # the in-block sort does not explode.  Widths <= 256 are unchanged.
@@ -713,6 +716,7 @@ def bootstrap_beam_outputs_out(
     num_warps: int = 4,
 ) -> None:
     """Expand the first parent of each request into caller-owned Beam outputs."""
+    gather = getattr(tl, "gather", None)
     _bootstrap_beam_outputs_kernel[(batch_size,)](
         cumulative_logprobs,
         top_tokens,
@@ -728,7 +732,8 @@ def bootstrap_beam_outputs_out(
         COMPACT_INPUT=compact_input,
         WRITE_FLAT_INDICES=out_grouped_flat_indices is not None,
         BLOCK=triton.next_power_of_2(max(beam_width, candidate_width)),
-        REUSE_ORDERED_CANDIDATES=reuse_ordered_candidates,
+        REUSE_ORDERED_CANDIDATES=reuse_ordered_candidates and gather is not None,
+        GATHER=gather,
         num_warps=num_warps,
     )
 

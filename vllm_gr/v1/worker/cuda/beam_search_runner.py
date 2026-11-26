@@ -20,6 +20,8 @@ from vllm_gr.ops.cuda.beam_selection import (
     _hierarchical_topk_out,
     bootstrap_beam_outputs_out,
 )
+from vllm_gr.platforms.interface import BeamKVReorderProvider
+from vllm_gr.platforms.registry import get_active_backend
 from vllm_gr.v1.beam.execution_batch import BeamBatchExecutionView
 from vllm_gr.v1.beam.session import BeamSearchSession
 from vllm_gr.v1.worker.cuda.beam_state import BeamSearchState
@@ -98,8 +100,12 @@ class BeamSearchRunner:
             raise ValueError("workspace_index exceeds workspace capacity")
         context = session.context
         width = state.beam_width
-        if state.device.type != "cuda":
-            raise ValueError("BeamSearchRunner requires CUDA state")
+        provider = get_active_backend() if state.device.type != "cuda" else None
+        self._reorder_kv = (
+            provider.get_beam_kv_reorder() if isinstance(provider, BeamKVReorderProvider) else None
+        )
+        if state.device.type != "cuda" and self._reorder_kv is None:
+            raise ValueError("BeamSearchRunner requires a GPU KV reorder implementation")
         if state.decision is not context.decision:
             raise ValueError("state must alias this session's decision buffers")
         if not session.is_active or session.beam_width != width:
@@ -233,6 +239,10 @@ class BeamSearchRunner:
             plan = (tensors, sizes, tuple(starts), tuple(fill for _, fill in rows))
             self._session_reset = plan
         tensors, sizes, starts, negative_infinity = plan
+        if self._reorder_kv is not None:
+            for tensor, fill_negative_infinity in zip(tensors, negative_infinity, strict=True):
+                tensor.fill_(float("-inf") if fill_negative_infinity else 0)
+            return
         ops._reset_session_state_kernel[(starts[-1],)](
             tensors, sizes, starts, negative_infinity, BLOCK=256, num_warps=4
         )
@@ -391,7 +401,9 @@ class BeamSearchRunner:
                 or tensor.device != first.device
             ):
                 raise ValueError("KV reorder requires compatible per-layer scratch")
-        for ptrs in (context.pool_key_ptrs, context.pool_value_ptrs):
+        for ptrs in (
+            () if pool_device.type != "cuda" else (context.pool_key_ptrs, context.pool_value_ptrs)
+        ):
             if (
                 ptrs is None
                 or ptrs.shape != (layers,)
@@ -411,7 +423,11 @@ class BeamSearchRunner:
             stride,
             dtype,
             pool_device,
-            tuple((t.data_ptr(), t.shape, t.stride(), t.dtype, t.device) for t in bound),
+            tuple(
+                (t.data_ptr(), t.shape, t.stride(), t.dtype, t.device)
+                for t in bound
+                if t is not None
+            ),
         )
 
     def end_session(self, consumer_done: torch.Event | None = None) -> None:
@@ -617,10 +633,23 @@ class BeamSearchRunner:
             PREFILL=prefill,
         )
         if not prefill:
-            _select_kv_gather_kernel[self._kv_grid](
-                *self._kv_args, s["parent_ids"], **self._kv_kwargs
-            )
-            _select_kv_scatter_kernel[self._kv_grid](*self._kv_args, **self._kv_kwargs)
+            if self._reorder_kv is not None:
+                if self._scratch["reorder"].item():
+                    decode_step = int(self._state["num_decode_steps"].item())
+                    for pool in self.session.context.pools:
+                        self._reorder_kv(
+                            pool.unshared_key,
+                            pool.unshared_value,
+                            self.session.slot,
+                            s["parent_ids"],
+                            decode_step,
+                            self._state["active_mask"],
+                        )
+            else:
+                _select_kv_gather_kernel[self._kv_grid](
+                    *self._kv_args, s["parent_ids"], **self._kv_kwargs
+                )
+                _select_kv_scatter_kernel[self._kv_grid](*self._kv_args, **self._kv_kwargs)
         ops._commit_step_kernel[(1,)](
             s["active_mask"],
             s["num_generated_tokens"],

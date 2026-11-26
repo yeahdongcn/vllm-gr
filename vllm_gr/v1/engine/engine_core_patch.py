@@ -34,12 +34,20 @@ def make_patched_engine_init(original):
     def initialize(self, *args, **kwargs):
         original(self, *args, **kwargs)
         from vllm_gr.config import GRConfig
+        from vllm_gr.config.backend_plan import read_backend_plan
         from vllm_gr.v1.engine.core import loaded_constraint_trie_count
         from vllm_gr.v1.engine.worker_readiness import verify_engine_backend_readiness
 
         verify_engine_backend_readiness(self)
 
         config = GRConfig.from_vllm_config(self.vllm_config)
+        plan = read_backend_plan(self.vllm_config)
+        if plan is not None and plan.backend_id == "musa" and config.beam_max_width:
+            # Eager Beam has one pending execute state. Consume it before
+            # vLLM can enqueue the next stage on the local worker.
+            self.step_fn = self.step
+            self.batch_queue = None
+            self.batch_queue_size = 1
         if config.beam_max_width is None:
             return
         counts = self.model_executor.collective_rpc(loaded_constraint_trie_count)

@@ -30,6 +30,44 @@ class ConfigProvider(Protocol):
     def create_config_service(self) -> BackendConfigService: ...
 
 
+class BeamKVReorder(Protocol):
+    def __call__(
+        self,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        slot: int,
+        parent_ids: torch.Tensor,
+        decode_step: int,
+        active_mask: torch.Tensor,
+    ) -> None: ...
+
+
+@runtime_checkable
+class BeamKVReorderProvider(Protocol):
+    def get_beam_kv_reorder(self) -> BeamKVReorder: ...
+
+
+class FullVocabularySelector(Protocol):
+    """Write Beam candidates into the stage runner's preallocated buffers."""
+
+    def __call__(
+        self,
+        logits: torch.Tensor,
+        temperatures: torch.Tensor,
+        token_ids: torch.Tensor,
+        logprobs: torch.Tensor,
+        valid_mask: torch.Tensor,
+        valid_counts: torch.Tensor,
+    ) -> None: ...
+
+
+@runtime_checkable
+class FullVocabularyProvider(Protocol):
+    """Optional replacement for the default GPU full-vocabulary selector."""
+
+    def get_full_vocabulary_selector(self) -> FullVocabularySelector: ...
+
+
 class ModelRunnerPatchHooks(Protocol):
     """Required hooks for the V1 ModelRunner patch dispatcher.
 
