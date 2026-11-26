@@ -48,8 +48,9 @@ def make_patched_prepare_inputs_gpu(_orig_prepare_inputs):
     if getattr(_orig_prepare_inputs, _WORKER_PREPARE_PATCH_MARKER, False):
         return _orig_prepare_inputs
 
+    # vLLM-MUSA execute_model passes use_cached_decode_logits_indices to _prepare_inputs.
     @wraps(_orig_prepare_inputs)
-    def patched_prepare_inputs(self, scheduler_output, num_scheduled_tokens):
+    def patched_prepare_inputs(self, scheduler_output, num_scheduled_tokens, **native_options):
         # Publish the scheduler output so the _model_forward prefill-graph
         # interception can classify the batch and extract token counts.
         self._current_scheduler_output = scheduler_output
@@ -57,7 +58,7 @@ def make_patched_prepare_inputs_gpu(_orig_prepare_inputs):
         logits_indices = try_prepare_gr_prefill_inputs(self, scheduler_output, num_scheduled_tokens)
         if logits_indices is None:
             logits_indices, spec_decode_metadata, max_num_sampled_tokens = _orig_prepare_inputs(
-                self, scheduler_output, num_scheduled_tokens
+                self, scheduler_output, num_scheduled_tokens, **native_options
             )
         else:
             spec_decode_metadata = None

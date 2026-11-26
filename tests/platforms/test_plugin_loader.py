@@ -330,7 +330,7 @@ def test_activate_current_backend_rejects_unknown_platform(
 
     message = str(exc_info.value)
     assert "device_type='cpu'" in message
-    assert "available=('ascend', 'cuda')" in message
+    assert "available=('ascend', 'cuda', 'musa')" in message
 
 
 def test_activate_current_backend_requires_an_ascend_identity_for_ascend(

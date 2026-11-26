@@ -11,6 +11,7 @@ import pytest
 from vllm_gr.platforms.ascend import NPU_BACKEND
 from vllm_gr.platforms.cuda import CUDA_BACKEND
 from vllm_gr.platforms.identity import platform_identity
+from vllm_gr.platforms.musa.provider import MUSA_BACKEND
 
 
 class _VendorPlatform:
@@ -90,6 +91,33 @@ def test_ascend_provider_requires_the_supported_class_lineage() -> None:
     # Same enum and placement, different vendor: rejected by matches(), not by
     # a table inside core.
     assert NPU_BACKEND.matches(platform_identity(_UnknownOutOfTreePlatform())) is False
+
+
+@pytest.mark.l1
+@pytest.mark.cpu_test
+def test_musa_provider_requires_native_musa_platform_identity() -> None:
+    class MUSAPlatformBase:
+        _enum = "OOT"
+        device_type = "musa"
+
+    MUSAPlatformBase.__module__ = "vllm_musa.platform"
+    MUSAPlatformBase.__qualname__ = "MUSAPlatformBase"
+
+    class MtmlMUSAPlatform(MUSAPlatformBase):
+        pass
+
+    native_platform = MtmlMUSAPlatform()
+    assert MUSA_BACKEND.matches(platform_identity(native_platform))
+    assert not MUSA_BACKEND.matches(
+        platform_identity(SimpleNamespace(_enum="OOT", device_type="musa"))
+    )
+
+    native_platform._enum = "CUDA"
+    assert not MUSA_BACKEND.matches(platform_identity(native_platform))
+
+    native_platform._enum = "OOT"
+    native_platform.device_type = "cuda"
+    assert not MUSA_BACKEND.matches(platform_identity(native_platform))
 
 
 def test_identity_describe_names_the_selection_inputs() -> None:

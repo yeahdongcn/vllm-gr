@@ -22,7 +22,7 @@ from setuptools_scm import get_version
 
 logger = logging.getLogger("vllm_gr.setup")
 
-_VALID_DEVICES = frozenset(("cuda", "npu", "cpu"))
+_VALID_DEVICES = frozenset(("cuda", "musa", "npu", "cpu"))
 VLLM_GR_BASE_VERSION = "0.30.0"
 ROOT_DIR = Path(__file__).resolve().parent
 _SCM_OVERRIDE = "SETUPTOOLS_SCM_PRETEND_VERSION_FOR_VLLM_GR"
@@ -85,6 +85,11 @@ def detect_target_device() -> str:
     try:
         import torch
 
+        if getattr(torch.version, "musa", None) is not None:
+            logger.info("Detected MUSA backend from torch")
+            _cached_device = "musa"
+            return _cached_device
+
         if torch.version.cuda is not None:
             logger.info("Detected CUDA backend from torch")
             _cached_device = "cuda"
@@ -145,7 +150,7 @@ def get_vllm_gr_version() -> str:
 
         if device == "cuda":
             pass
-        elif device in ("npu", "cpu"):
+        elif device in ("musa", "npu", "cpu"):
             sep = "+" if "+" not in version else "."
             version += f"{sep}{device}"
         else:

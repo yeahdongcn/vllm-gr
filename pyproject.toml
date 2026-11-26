@@ -87,6 +87,7 @@ vllm_gr = "vllm_gr.plugin:register"
 [project.entry-points."vllm_gr.platform_backends"]
 cuda = "vllm_gr.platforms.cuda.provider:CUDA_BACKEND"
 ascend = "vllm_gr.platforms.ascend.provider:NPU_BACKEND"
+musa = "vllm_gr.platforms.musa.provider:MUSA_BACKEND"
 
 # Historical v1 entry points identify tensor placement instead of the provider.
 [project.entry-points."vllm_gr.legacy_placements"]
@@ -105,6 +106,7 @@ include = ["vllm_gr*"]
 "vllm_gr.config" = ["default_config.yaml"]
 "vllm_gr.entrypoints.grpc" = ["proto/*.proto"]
 "vllm_gr.entrypoints.grpc.generated" = ["README.md"]
+"vllm_gr.platforms.musa" = ["README.md"]
 
 [tool.setuptools_scm]
 # setup.py owns version selection and device suffixes.

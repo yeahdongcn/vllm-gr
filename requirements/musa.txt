@@ -1,0 +1,5 @@
+-r common.txt
+
+# The prepared MUSA environment supplies vLLM, PyTorch, and vendor libraries.
+# Match vLLM-MUSA and retain the prepared image's NumPy-compatible OpenCV.
+numpy<2
