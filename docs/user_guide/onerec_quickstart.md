@@ -1,5 +1,7 @@
 # OneRec asynchronous Beam search on CUDA
 
+For single-device S5000 setup, see [OneRec on MUSA](musa_quickstart.md).
+
 <a id="onerec-v1-asynchronous-scheduling-on-cuda"></a>
 
 Run a catalog-constrained OneRec-1.7B request with ModelRunner V1 and
