@@ -111,7 +111,8 @@ class GPUPrefillGraphRunner(BasePrefillGraphRunner):
             )
             return
 
-        if not is_cuda_available():
+        musa = torch.device(self.device).type == "musa"
+        if not musa and not is_cuda_available():
             logger.info("CUDA not available; skipping CUDA graph capture for prefill.")
             return
 
@@ -318,12 +319,16 @@ class GPUPrefillGraphRunner(BasePrefillGraphRunner):
                     torch.accelerator.synchronize()
 
                     # Capture CUDA graph
-                    graph = torch.cuda.CUDAGraph()
+                    graph = torch.musa.MUSAGraph() if musa else torch.cuda.CUDAGraph()
                     with (
                         # These graphs replay only for fresh prompts when dense
                         # Prefill is requested (see beam_dense_prefill).
                         fresh_prefill_capture(),
-                        torch.cuda.graph(graph, pool=pool, stream=torch.cuda.current_stream()),
+                        (torch.musa if musa else torch.cuda).graph(
+                            graph,
+                            pool=pool,
+                            stream=(torch.musa if musa else torch.cuda).current_stream(),
+                        ),
                         set_forward_context(
                             attn_metadata,
                             runner.vllm_config,

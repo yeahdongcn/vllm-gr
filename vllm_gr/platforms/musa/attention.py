@@ -121,6 +121,20 @@ def write_paged_kv(
     """Scatter valid slots into the logical NHD view, preserving its strides."""
     if key_cache.dtype != key.dtype or value_cache.dtype != value.dtype:
         raise ValueError("Eager MUSA Beam requires unquantized KV")
+    if torch.musa.is_current_stream_capturing():
+        from vllm._custom_ops import reshape_and_cache_flash
+
+        reshape_and_cache_flash(
+            key,
+            value,
+            key_cache,
+            value_cache,
+            slot_mapping,
+            kv_cache_dtype,
+            k_scale,
+            v_scale,
+        )
+        return
     slots = slot_mapping.long()
     valid = slots >= 0
     slots = slots[valid]
@@ -282,11 +296,28 @@ class EagerBeamAttention:
             or alibi_slopes is not None
         ):
             raise ValueError("Unsupported eager MUSA Beam prefill configuration")
-        offsets = attn_metadata.query_start_loc.tolist()
-        lengths = attn_metadata.seq_lens.tolist()
         blocks = getattr(attn_metadata, "block_table_tensor", None)
         if blocks is None:
             blocks = attn_metadata.block_table
+        if torch.musa.is_current_stream_capturing():
+            from flash_attn_interface import flash_attn_varlen_func
+
+            flash_attn_varlen_func(
+                q=query,
+                k=key_cache,
+                v=value_cache,
+                out=output,
+                cu_seqlens_q=attn_metadata.query_start_loc,
+                max_seqlen_q=attn_metadata.max_query_len,
+                seqused_k=attn_metadata.seq_lens,
+                max_seqlen_k=attn_metadata.max_seq_len,
+                block_table=blocks,
+                softmax_scale=scale,
+                causal=attn_metadata.causal,
+            )
+            return
+        offsets = attn_metadata.query_start_loc.tolist()
+        lengths = attn_metadata.seq_lens.tolist()
         for row, length in enumerate(lengths):
             start, end = offsets[row : row + 2]
             if start == end:

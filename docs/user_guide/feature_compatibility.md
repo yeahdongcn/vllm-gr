@@ -28,6 +28,19 @@ The matrix describes the documented runtime paths and their configuration limits
 | SID stage projection for catalog-free generation | Not applicable | Supported | [Beam Search on NPU](beam_search_npu.md) |
 | Caller-owned XAttention output binding | Not applicable | Optional, separate build | [XAttention output](../design/feature/npu_decode_execution.md#caller-owned-xattention-output) |
 
+## Moore Threads MUSA
+
+The [OneRec on MUSA quickstart](musa_quickstart.md) documents the validated
+single-S5000 configuration with vLLM-MUSA 0.32.0.
+
+| Feature | Validated configuration |
+| --- | --- |
+| ModelRunner and attention | V1, one S5000, CUSTOM attention, asynchronous scheduling |
+| Full-vocabulary Beam | OneRec-1.7B offline and HTTP, width 2, eager |
+| Catalog-constrained Beam | OneRec-1.7B, width 2, three SID components, eager. Two concurrent HTTP clients used a single-request execution bucket. |
+| GR decode and prefill graphs | OneRec-1.7B offline, full-vocabulary Beam, width 2 and execution bucket 1 |
+| ModelRunner V2, multi-GPU, gRPC, online catalog replacement | Validation pending |
+
 ## How to read this matrix
 
 - "Supported" describes a documented execution path. The linked guides record

@@ -55,8 +55,6 @@ class MUSABackendProvider(CUDABackendProvider):
     def resolve(self, request: BackendRequest) -> BackendPlan:
         native = request.native.to_dict()
         gr = request.config.to_dict()
-        if gr["deployment"]["prefill_graph_enabled"]:
-            raise ValueError("MUSA Beam currently requires eager prefill")
         if not gr["beam_graph_enabled"] and not native["model_config"]["enforce_eager"]:
             raise ValueError("MUSA Beam requires eager execution or a decode graph")
         if native["use_v2_model_runner"] or any(

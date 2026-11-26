@@ -44,6 +44,7 @@ The pinned smoke returned `<s_a_5719><s_b_324>` followed by
 | HTTP full-vocabulary Beam | HTTP 200, same ordering as offline |
 | Canonical catalog | Four-entry table, width 2, three SID components |
 | Concurrent catalog HTTP | Two concurrent clients with a single-request Beam bucket |
-| Prefill and decode graphs, ModelRunner V2, multi-GPU | Pending |
+| Prefill and decode graphs | Offline full-vocabulary Beam, width 2, execution bucket 1, observed prefill and decode replay |
+| ModelRunner V2 and multi-GPU | Validation pending |
 
 For table format and catalog preparation, see the [OneRec quickstart](onerec_quickstart.md).
