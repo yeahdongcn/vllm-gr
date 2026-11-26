@@ -37,8 +37,9 @@ class BeamKVReorder(Protocol):
         value: torch.Tensor,
         slot: int,
         parent_ids: torch.Tensor,
-        decode_step: int,
+        decode_step: torch.Tensor,
         active_mask: torch.Tensor,
+        execute: torch.Tensor,
     ) -> None: ...
 
 

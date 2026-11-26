@@ -634,17 +634,16 @@ class BeamSearchRunner:
         )
         if not prefill:
             if self._reorder_kv is not None:
-                if self._scratch["reorder"].item():
-                    decode_step = int(self._state["num_decode_steps"].item())
-                    for pool in self.session.context.pools:
-                        self._reorder_kv(
-                            pool.unshared_key,
-                            pool.unshared_value,
-                            self.session.slot,
-                            s["parent_ids"],
-                            decode_step,
-                            self._state["active_mask"],
-                        )
+                for pool in self.session.context.pools:
+                    self._reorder_kv(
+                        pool.unshared_key,
+                        pool.unshared_value,
+                        self.session.slot,
+                        s["parent_ids"],
+                        self._state["num_decode_steps"],
+                        self._state["active_mask"],
+                        self._scratch["reorder"],
+                    )
             else:
                 _select_kv_gather_kernel[self._kv_grid](
                     *self._kv_args, s["parent_ids"], **self._kv_kwargs

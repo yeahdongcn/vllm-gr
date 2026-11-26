@@ -133,8 +133,12 @@ def _capture_enabled(worker: Any) -> bool:
             "Beam V1 requires worker decisions, fixed width and either an enabled "
             "canonical table or gr.constraint_mode=none"
         )
-    if mode is ConstraintMode.NONE and str(worker.device).split(":")[0] not in ("cuda", "npu"):
-        raise ValueError("unconstrained Beam V1 requires CUDA or NPU")
+    if mode is ConstraintMode.NONE and str(worker.device).split(":")[0] not in (
+        "cuda",
+        "musa",
+        "npu",
+    ):
+        raise ValueError("unconstrained Beam V1 requires CUDA, MUSA, or NPU")
     if mode is ConstraintMode.NONE and str(worker.device).split(":")[0] == "npu":
         validate_gr_device_config(worker.vllm_config)
     # A one-token session completes in Prefill and never replays a Decode graph.
