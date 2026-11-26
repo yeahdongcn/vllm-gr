@@ -611,7 +611,7 @@ def load_constraint_backend(
             )
         if dtype not in (torch.float16, torch.bfloat16):
             raise ValueError(f"CUDA constraint logits must be fp16/bf16, got {dtype}")
-        if device.type != "cuda":
+        if device.type not in ("cuda", "musa"):
             raise RuntimeError(f"CUDA constraint backend requires a CUDA device, got {device}")
     if backend_kind is ConstraintBackendKind.NPU:
         if max_top_k > MAX_TOP_K:

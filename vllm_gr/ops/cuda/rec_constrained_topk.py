@@ -104,6 +104,7 @@ def _fused_topk_kernel(
     DEVICE_STEP: tl.constexpr,
     BLOCK: tl.constexpr,
     OUTPUT_BLOCK: tl.constexpr,
+    TOPK: tl.constexpr,
     WINDOW_BLOCK: tl.constexpr,
 ):
     if DEVICE_STEP:
@@ -259,9 +260,11 @@ def _fused_topk_kernel(
     # Select only the output bucket instead of sorting the entire candidate row.
     if OUTPUT_BLOCK == 1:
         sorted_pairs = tl.min(packed, axis=0).expand_dims(0)
+    elif TOPK is not None:
+        sorted_pairs = ~TOPK(~packed, OUTPUT_BLOCK)
     else:
-        sorted_pairs = ~tl.topk(~packed, OUTPUT_BLOCK)
-    offsets = tl.arange(0, OUTPUT_BLOCK)
+        sorted_pairs = tl.sort(packed, descending=False)
+    offsets = tl.arange(0, sorted_pairs.shape[0])
     selected_offsets = (sorted_pairs & 0x00000000FFFFFFFF).to(tl.int64)
     sorted_keys = ((sorted_pairs >> 32) & 0x00000000FFFFFFFF).to(tl.int32)
     sorted_sign = sorted_keys >> 31
@@ -366,7 +369,7 @@ def _validate_inputs(
     first_token_offsets: torch.Tensor | None = None,
     max_first_degree: int = 0,
 ) -> tuple[int, int, torch.Tensor, int]:
-    if logits.device.type != "cuda":
+    if logits.device.type not in ("cuda", "musa"):
         raise ValueError(f"CUDA constrained Top-K requires CUDA logits, got {logits.device}")
     if logits.dtype not in (torch.float16, torch.bfloat16):
         raise TypeError(f"logits must use fp16/bf16 on CUDA, got {logits.dtype}")
@@ -567,6 +570,7 @@ def _stage_topk_kernel(
     TRIE_COUNT: tl.constexpr,
     BLOCKS: tl.constexpr,
     OUTPUT_BLOCK: tl.constexpr,
+    TOPK: tl.constexpr,
     WINDOW_BLOCK: tl.constexpr,
 ):
     # Scalar specialization controls do not recurse into tuple arguments.
@@ -598,6 +602,7 @@ def _stage_topk_kernel(
             DEVICE_STEP=False,
             BLOCK=BLOCKS[0],
             OUTPUT_BLOCK=OUTPUT_BLOCK,
+            TOPK=TOPK,
             WINDOW_BLOCK=WINDOW_BLOCK,
         )
     elif stage == 1:
@@ -623,6 +628,7 @@ def _stage_topk_kernel(
             DEVICE_STEP=False,
             BLOCK=BLOCKS[1],
             OUTPUT_BLOCK=OUTPUT_BLOCK,
+            TOPK=TOPK,
             WINDOW_BLOCK=WINDOW_BLOCK,
         )
     else:
@@ -648,6 +654,7 @@ def _stage_topk_kernel(
             DEVICE_STEP=False,
             BLOCK=BLOCKS[2],
             OUTPUT_BLOCK=OUTPUT_BLOCK,
+            TOPK=TOPK,
             WINDOW_BLOCK=WINDOW_BLOCK,
         )
 
@@ -721,6 +728,7 @@ def _launch_rec_constrained_topk_cuda_out(
             TRIE_COUNT=1 if first_token_offsets is None else first_token_offsets.numel() - 1,
             BLOCKS=stage_blocks,
             OUTPUT_BLOCK=triton.next_power_of_2(top_k),
+            TOPK=getattr(tl, "topk", None),
             WINDOW_BLOCK=2048,
             num_warps=8 if block >= 2048 else 4,
         )
@@ -764,6 +772,7 @@ def _launch_rec_constrained_topk_cuda_out(
         DEVICE_STEP=device_step is not None,
         BLOCK=block,
         OUTPUT_BLOCK=triton.next_power_of_2(top_k),
+        TOPK=getattr(tl, "topk", None),
         WINDOW_BLOCK=2048,
         num_warps=8 if block >= 2048 else 4,
     )

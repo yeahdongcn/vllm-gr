@@ -151,7 +151,7 @@ class CUDAConstraintBackend:
                 self._info,
                 expected_logits_vocab_size=expected_logits_vocab_size,
             )
-            if logits.device.type != "cuda":
+            if logits.device.type not in ("cuda", "musa"):
                 raise ValueError(
                     f"CUDA constraint backend requires CUDA logits, got {logits.device}"
                 )

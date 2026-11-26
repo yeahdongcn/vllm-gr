@@ -657,7 +657,7 @@ def resolve_constraint_backend(config: GRConfig, device_type: str) -> GRConfig:
         or constraint.table.backend is not ConstraintBackendKind.AUTO
     ):
         return config
-    backend = ConstraintBackendKind(device_type)
+    backend = ConstraintBackendKind("cuda" if device_type == "musa" else device_type)
     if backend is ConstraintBackendKind.AUTO:
         raise ValueError("auto requires a concrete platform device type")
     return replace(
